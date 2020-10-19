@@ -81,7 +81,7 @@ class Extractor:
           # match features
           if prev_feats:
             idx_mapping = self.match_features(curr_feats, prev_feats)
-            print("got {} matches on frame {}".format(len(idx_mapping), num_frames))
+            print("\rgot {} matches on frame {}".format(len(idx_mapping), num_frames), end='')
 
             # output features to files
             output.write('{}\n'.format(len(idx_mapping)))
@@ -97,9 +97,9 @@ class Extractor:
                 cv2.circle(img, (x1, y1), color=(0, 255, 0), radius=3)
                 cv2.line(img, (x1, y1), (x2, y2), color=(255, 0, 0))
 
-            # keep track of minimum features in a fram
-            if len(idx_mapping) < min_feats:
-                min_feats = len(idx_mapping)
+          # keep track of minimum features in a fram
+          if len(idx_mapping) < min_feats:
+            min_feats = len(idx_mapping)
 
           # draw frame with features to screen
           if self.display:
@@ -108,8 +108,8 @@ class Extractor:
           num_frames = num_frames + 1
 
         else:
+            print()
             break
-
       print("min features in a frame: {}".format(min_feats))  
 
 if __name__ == "__main__":
