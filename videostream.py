@@ -31,7 +31,7 @@ class Display:
 
     self.window.refresh()
 
-class Extractor:
+class FeatureExtractor:
   def __init__(self, display):
     self.display = Display(WIDTH, HEIGHT) if display else None
     self.orb = cv2.ORB_create()
@@ -97,9 +97,9 @@ class Extractor:
                 cv2.circle(img, (x1, y1), color=(0, 255, 0), radius=3)
                 cv2.line(img, (x1, y1), (x2, y2), color=(255, 0, 0))
 
-          # keep track of minimum features in a fram
-          if len(idx_mapping) < min_feats:
-            min_feats = len(idx_mapping)
+            # keep track of minimum features in a fram
+            if len(idx_mapping) < min_feats:
+              min_feats = len(idx_mapping)
 
           # draw frame with features to screen
           if self.display:
@@ -115,6 +115,6 @@ class Extractor:
 if __name__ == "__main__":
   # extract features from video file and save them
   video_file = os.path.join(os.getcwd(), 'data/train.mp4')
-  speed_file = os.path.join(os.getcwd(), 'data/train-features.txt')
-  extractor = Extractor(False)
-  extractor.extract_from_video(video_file, speed_file)
+  out_file = os.path.join(os.getcwd(), 'data/train-features.txt')
+  extractor = FeatureExtractor(False)
+  extractor.extract_from_video(video_file, out_file)

@@ -5,9 +5,11 @@ import random
 from tensorflow.keras import layers, models, losses
 from tensorflow import data
 
+import matplotlib.pyplot as plt
+
 # wrapper class to create dataset form features text file
 FEATS_PER_EXAMPLE=100
-EXAMPLES_PER_FRAME=25
+EXAMPLES_PER_FRAME=75
 class Dataset:
   def __init__(self, dataset_file, features_file=None, speed_file=None):
     if bool(features_file) != bool(speed_file):
@@ -74,44 +76,45 @@ class Model:
   def __init__(self):
     # construct CNN model
     self.model = models.Sequential()
-    self.model.add(layers.Conv2D(32, (1, 1), activation='relu', input_shape=(34, 100, 2)))
-    
-    self.model.add(layers.Conv2D(32, (2, 1), strides=(2, 1), activation='relu')) 
-    self.model.add(layers.Conv2D(64, (2, 1), strides=(2, 1), activation='relu')) 
-    self.model.add(layers.Conv2D(64, (2, 1), strides=(2, 1), activation='relu')) 
-    self.model.add(layers.Conv2D(128, (2, 1), strides=(2, 1), activation='relu')) 
-    self.model.add(layers.Conv2D(256, (2, 1), strides=(2, 1), activation='relu')) 
-
-    self.model.add(layers.Conv2D(128, (1, 1), activation='relu'))
-    self.model.add(layers.Conv2D(64, (1, 1), activation='relu'))
-    self.model.add(layers.Conv2D(32, (1, 1), activation='relu'))
-    self.model.add(layers.Conv2D(16, (1, 1), activation='relu'))
-    self.model.add(layers.Conv2D(1, (1, 1), activation='relu'))
+    self.model.add(layers.Conv2D(16, (1, 1), activation='relu', input_shape=(34, 100, 2)))
+    self.model.add(layers.Conv2D(16, (34, 1), activation='relu'))
+    self.model.add(layers.Conv2D(32, (1, 100), activation='relu'))
 
     self.model.add(layers.Flatten())
-    self.model.add(layers.Dense(50, activation='relu'))
-    self.model.add(layers.Dense(25, activation='relu'))
-    self.model.add(layers.Dense(1, activation='relu'))
+    self.model.add(layers.Dense(32, activation='relu'))
+    self.model.add(layers.Dense(8, activation='relu'))
+    self.model.add(layers.Dense(1))
 
     self.model.summary()
 
   def train(self, X, y):
-    tot_dataset = data.Dataset.from_tensor_slices((X,y))
-    tot_dataset = tot_dataset.shuffle(100000)
-    train_dataset = tot_dataset.skip(5120).batch(256)
-    val_dataset = tot_dataset.take(5120).batch(256)
+    val_idx = random.sample(range(X.shape[0]), 10240)
+    train_idx = [idx for idx in range(X.shape[0]) if idx not in val_idx]
+    train_dataset = data.Dataset.from_tensor_slices((X[train_idx,:,:,:], y[train_idx]))
+    train_dataset = train_dataset.shuffle(300000).batch(128)
+    val_dataset = data.Dataset.from_tensor_slices((X[val_idx,:,:,:], y[val_idx]))
+    val_dataset = val_dataset.batch(128)
 
     print("Training Model ...")
     self.model.compile(optimizer = 'adam',
-            loss = losses.MeanSquaredError(),
-            metrics = ['accuracy'])
-    self.model.fit(train_dataset, epochs=15)
+            loss = losses.MeanSquaredError())
+    history = self.model.fit(train_dataset, epochs=10, validation_data=val_dataset)
 
     print("Validating Model ...")
     self.model.evaluate(val_dataset)
 
     print("Saving Model ...")
     self.model.save('feature_model')
+
+    print("Displaying Loss Plots ...")
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title("Feature Model Loss")
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='upper left')
+    plt.show()
+
 
 if __name__ == "__main__":
   dataset = Dataset('data/feat-dataset') #, 'data/train-features.txt', 'data/train.txt')
