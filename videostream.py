@@ -39,7 +39,7 @@ class FeatureExtractor:
 
   def extract_features(self, img):
     # use Shi-Tomasi corner detector to find features, amd compute descrip[tors with ORB
-    key_points = cv2.goodFeaturesToTrack(np.mean(img, axis=2).astype(np.uint8), 600, qualityLevel=0.01, minDistance=3)
+    key_points = cv2.goodFeaturesToTrack(np.mean(img, axis=2).astype(np.uint8), 2000, qualityLevel=0.01, minDistance=3)
     key_points = [cv2.KeyPoint(kp[0][0], kp[0][1], _size=20) for kp in key_points]
     key_points, desc = self.orb.compute(img, key_points)
     return {'kps': key_points, 'desc': desc}
@@ -58,7 +58,7 @@ class FeatureExtractor:
       key_points = np.array(key_points)
       models, inliers = ransac((key_points[:, 0], key_points[:, 1]),
                                 FundamentalMatrixTransform,
-                                min_samples=8, residual_threshold=1, max_trials=100)
+                                min_samples=10, residual_threshold=1, max_trials=100)
       idx_mapping = np.array(idx_mapping)
       idx_mapping = idx_mapping[inliers]
     return idx_mapping

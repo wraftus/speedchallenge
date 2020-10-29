@@ -1,2 +1,3 @@
 data/train-features.txt
-data/feat-dataset.npz
+data/train-feats-dataset.npz
+data/val-feats-dataset.npz

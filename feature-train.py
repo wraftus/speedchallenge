@@ -9,16 +9,17 @@ import matplotlib.pyplot as plt
 
 # wrapper class to create dataset form features text file
 FEATS_PER_EXAMPLE=100
-EXAMPLES_PER_FRAME=75
+EXAMPLES_PER_FRAME=100
+VALIDATION_SIZE=20480
 class Dataset:
-  def __init__(self, dataset_file, features_file=None, speed_file=None):
+  def __init__(self, train_file, val_file, features_file=None, speed_file=None):
     if bool(features_file) != bool(speed_file):
       raise Exception("You only have one of features_file or speed_file")
 
     # if features_file is not None, we need to construct the dataset
     if features_file:
-      self.X = []
-      self.y = []
+      X = []
+      y = []
 
       # read in speeds from each frame
       with open(speed_file) as raw_speed:
@@ -35,7 +36,6 @@ class Dataset:
 
             # get all features from the new/prev frame
             for i in range(int(num_feats)):
-              # only take the first 100 matching features per frame
               feat_pair = ast.literal_eval(raw_feats.readline().rstrip())
               new_feats.append(feat_pair[0] + feat_pair[2])
               old_feats.append(feat_pair[1] + feat_pair[3])
@@ -45,8 +45,9 @@ class Dataset:
               rand_idx = random.sample(range(len(new_feats)), FEATS_PER_EXAMPLE)
               shuffled_new_feats = [new_feats[idx] for idx in rand_idx]
               shuffled_old_feats = [old_feats[idx] for idx in rand_idx]
-              self.X.append([shuffled_new_feats, shuffled_old_feats])
-              self.y.append(speeds[num_frame])
+              new_ex = np.array([shuffled_new_feats, shuffled_old_feats], np.uint16)
+              X.append(np.swapaxes(new_ex, 0, 2))
+              y.append(speeds[num_frame])
             print("\rgot examples from frame {}".format(num_frame := num_frame + 1), end='')    
 
           # break when we run out of frames      
@@ -54,54 +55,62 @@ class Dataset:
             print()
             break
 
-      # turn out X into a numpy array (# frames, # of feats, size of feat + 2, 2)
-      self.X = np.array(self.X, np.uint16)
-      self.X = np.swapaxes(self.X, 1, 3)
-      self.y = np.array(self.y)
-      print("X shape {}".format(self.X.shape))
-      print("y shape{}".format(self.y.shape))
+      # slpit X into train and val numpy arrays (# examples, size of feat + 2, # of feats per ex, 2)
+      val_idx = random.sample(range(len(X)), VALIDATION_SIZE)
+      train_idx = [idx for idx in range(len(X)) if idx not in val_idx]
+      self.X_train = np.array([X[idx] for idx in train_idx])
+      self.X_val = np.array([X[idx] for idx in val_idx])
+      self.y_train = np.array([y[idx] for idx in train_idx])
+      self.y_val = np.array([y[idx] for idx in val_idx])
+
+      print("Train X shape {}".format(self.X_train.shape))
+      print("Train y shape{}".format(self.y_train.shape))
+      print("Validation X shape {}".format(self.X_val.shape))
+      print("Validation y shape{}".format(self.y_val.shape))
 
       # save numpy arrays
-      np.savez(dataset_file, self.X, self.y)
+      np.savez(train_file, self.X_train, self.y_train)
+      np.savez(val_file, self.X_val, self.y_val)
 
     #else we read the dataset from the file
     else:
-      from_file = np.load("{}.npz".format(dataset_file))
-      self.X, self.y = from_file['arr_0'], from_file['arr_1']
-      print("X shape {}".format(self.X.shape))
-      print("y shape{}".format(self.y.shape))
+      with np.load("{}.npz".format(train_file)) as train_file:
+        self.X_train, self.y_train = train_file['arr_0'], train_file['arr_1']
+        print("Train X shape {}".format(self.X_train.shape))
+        print("Train y shape{}".format(self.y_train.shape))
+      
+      with np.load("{}.npz".format(val_file)) as val_file:
+        self.X_val, self.y_val = val_file['arr_0'], val_file['arr_1']
+        print("Validation X shape {}".format(self.X_val.shape))
+        print("Validation y shape{}".format(self.y_val.shape))
 
 # wrapper class for features model
 class Model:
   def __init__(self):
     # construct CNN model
     self.model = models.Sequential()
-    self.model.add(layers.Conv2D(16, (1, 1), activation='relu', input_shape=(34, 100, 2)))
-    self.model.add(layers.Conv2D(16, (34, 1), activation='relu'))
-    self.model.add(layers.Conv2D(32, (1, 100), activation='relu'))
+    self.model.add(layers.Conv2D(16, (1, 1), activation='relu', input_shape=(34, FEATS_PER_EXAMPLE, 2)))
+    self.model.add(layers.Conv2D(32, (34, 1), activation='relu'))
+    self.model.add(layers.Conv2D(32, (1, FEATS_PER_EXAMPLE), activation='relu'))
 
     self.model.add(layers.Flatten())
     self.model.add(layers.Dense(32, activation='relu'))
-    self.model.add(layers.Dense(8, activation='relu'))
     self.model.add(layers.Dense(1))
 
     self.model.summary()
 
-  def train(self, X, y):
-    val_idx = random.sample(range(X.shape[0]), 10240)
-    train_idx = [idx for idx in range(X.shape[0]) if idx not in val_idx]
-    train_dataset = data.Dataset.from_tensor_slices((X[train_idx,:,:,:], y[train_idx]))
-    train_dataset = train_dataset.shuffle(300000).batch(128)
-    val_dataset = data.Dataset.from_tensor_slices((X[val_idx,:,:,:], y[val_idx]))
+  def train(self, X_train, y_train, X_val, y_val):
+    train_dataset = data.Dataset.from_tensor_slices((X_train, y_train))
+    X_train, y_train = [], []
+    val_dataset = data.Dataset.from_tensor_slices((X_val, y_val))
+    X_val, y_val = [], []
+    train_dataset = train_dataset.shuffle(500000).batch(128)
     val_dataset = val_dataset.batch(128)
 
     print("Training Model ...")
     self.model.compile(optimizer = 'adam',
             loss = losses.MeanSquaredError())
-    history = self.model.fit(train_dataset, epochs=10, validation_data=val_dataset)
-
-    print("Validating Model ...")
-    self.model.evaluate(val_dataset)
+    history = self.model.fit(train_dataset, epochs=20, validation_data=val_dataset)
 
     print("Saving Model ...")
     self.model.save('feature_model')
@@ -117,6 +126,6 @@ class Model:
 
 
 if __name__ == "__main__":
-  dataset = Dataset('data/feat-dataset') #, 'data/train-features.txt', 'data/train.txt')
+  dataset = Dataset('data/train-feats-dataset','data/val-feats-dataset', 'data/train-features.txt', 'data/train.txt')
   model = Model()
-  model.train(dataset.X, dataset.y)
+  model.train(dataset.X_train, dataset.y_train, dataset.X_val, dataset.y_val)
